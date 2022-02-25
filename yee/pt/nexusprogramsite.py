@@ -85,7 +85,8 @@ class NexusProgramSite(PTSite, metaclass=ABCMeta):
             res = self.req.get(
                 url='%s://%s%s%s' % (parsed.scheme, parsed.hostname, parsed.path, query_str),
                 cookies=self.cookies,
-                headers=self.headers
+                headers=self.headers,
+                flaresolverr=self.kwargs['flaresolverr']
             )
             if res is None:
                 break

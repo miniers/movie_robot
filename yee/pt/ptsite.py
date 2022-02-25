@@ -8,6 +8,8 @@ PT站操作类
 class PTSite(metaclass=ABCMeta):
     def __init__(self, **kwargs):
         kwargs.setdefault('type', 'cookie')
+        kwargs.setdefault('flaresolverr', None)
+        self.kwargs = kwargs
         if kwargs['type'] == 'user':
             self.login(kwargs['username'], kwargs['password'])
         elif kwargs['type'] == 'cookie':

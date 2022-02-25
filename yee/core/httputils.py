@@ -3,11 +3,12 @@ import logging
 import random
 import time
 from http.cookiejar import Cookie
+from urllib.parse import urlencode
 
 import requests
 import urllib3
 from requests.cookies import RequestsCookieJar
-
+from requests.models import Response
 
 class RequestUtils:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -31,7 +32,22 @@ class RequestUtils:
                                None, [], False)
             cookie_jar.set_cookie(cookiestr)
         return cookie_jar
-
+    def cookiedict_to_jar(self,cookies):
+        cookie_jar = RequestsCookieJar()
+         # 默认设30天过期
+        expire = round(time.time()) + 60 * 60 * 24 * 30
+        for c in cookies:
+            cookiestr = Cookie(0, c['name'], c['value'], None, False, c['domain'], False, False, '/', True, c['secure'], c['expires'] if c['expires'] >0 else expire,
+                               False, None,
+                               None, [], False)
+            cookie_jar.set_cookie(cookiestr)
+        return cookie_jar
+    def cookiejar_to_dict(self, cookie):
+        return [
+            {'name': c.name, 'value': c.value, 'domain': c.domain,
+                'path': c.path, 'url': '', 'expires': c.expires, 'secure': c.secure}
+            for c in cookie
+        ]
     def check_request(self):
         if not self.request_interval_mode:
             return
@@ -57,7 +73,58 @@ class RequestUtils:
             time.sleep(sleep_secs)
         self.__pre_request_time = datetime.datetime.now()
 
-    def post(self, url, params, headers=None):
+    def init_flaresolverr_session(self, flaresolverr, session):
+        res = requests.post(url=flaresolverr + '/v1', json={
+            'cmd': 'sessions.list',
+        }, headers={
+            "Content-Type": "application/json"
+        }).json()
+        if len(res['sessions']) < 1 or session not in res['sessions']:
+            requests.post(url=flaresolverr + '/v1', json={
+                'cmd': 'sessions.create',
+                'session': session
+            }, headers={
+                "Content-Type": "application/json"
+            })
+
+    def request(self, url, method='get', flaresolverr=None, param=None, data=None, **kwargs):
+        kwargs.setdefault('verify', False)
+        kwargs.setdefault('headers', {})
+        kwargs.setdefault('cookies', None)
+        kwargs.setdefault('allow_redirects', True)
+        if flaresolverr is not None:
+            self.init_flaresolverr_session(flaresolverr, 'movie_robot')
+            json = {
+                'cmd': 'request.' + method,
+                'url': url,
+                'session': 'movie_robot',
+                'cookies': [] if kwargs['cookies'] is None else self.cookiejar_to_dict(kwargs['cookies'])
+            }
+            if method == 'post':
+                json['postData'] = urlencode(data)
+            r = requests.post(url=flaresolverr + '/v1', json=json, headers={
+                "Content-Type": "application/json"
+            }).json()
+            response = Response()
+            if 'solution' in r.keys():
+                res = r["solution"]
+                response.url = res['url']
+                response.cookies = self.cookiedict_to_jar(res['cookies'])
+                response.headers = res['headers']
+                response.status_code = res['status']
+                response._content = res['response'].encode('utf-8')
+            else:
+                response.status_code = 500
+                response._content = r['message'].encode('utf-8')
+            return response
+        else:
+            if method == 'post':
+                kwargs.setdefault('data', data)
+                return requests.post(url, **kwargs)
+            else:
+                return requests.get(url, **kwargs)
+
+    def post(self, url, params=None, headers=None, flaresolverr=None):
         i = 0
         while i < 3:
             try:
@@ -70,7 +137,7 @@ class RequestUtils:
                 logging.info('请求%s 失败，开始准备重试(%s/3)' % (url, i))
                 logging.info("错误信息：%s" % e)
 
-    def get_text(self, url, params=None, headers=None):
+    def get_text(self, url, params=None, headers=None, flaresolverr=None):
         i = 0
         while i < 3:
             try:
@@ -82,38 +149,39 @@ class RequestUtils:
                 logging.info('请求%s 失败，开始准备重试(%s/3)' % (url, i))
                 logging.info("错误信息：%s" % e)
 
-    def get(self, url, params=None, headers=None, cookies=None, skip_check=False, verify=False, allow_redirects=True):
+    def get(self, url, params=None, headers=None, cookies=None, skip_check=False, verify=False, allow_redirects=True, flaresolverr=None):
         i = 0
         while i < 3:
             try:
                 if not skip_check:
                     self.check_request()
-                return requests.get(url, params=params, verify=verify, headers=headers, cookies=cookies,
+                return self.request(url, method='get', params=params, verify=verify, headers=headers, cookies=cookies, flaresolverr=flaresolverr,
                                     allow_redirects=allow_redirects)
             except requests.exceptions.RequestException as e:
                 i += 1
                 logging.info('请求%s 失败，开始准备重试(%s/3)' % (url, i))
                 logging.info("错误信息：%s" % e)
 
-    def post_res(self, url, params=None, headers=None, cookies=None, allow_redirects=True, skip_check=False):
+    def post_res(self, url, params=None, headers=None, cookies=None, allow_redirects=True, skip_check=False, flaresolverr=None):
         i = 0
         while i < 3:
             try:
                 if not skip_check:
                     self.check_request()
-                return requests.post(url, data=params, verify=False, headers=headers, cookies=cookies,
+                return self.request(url, method='post', data=params, verify=False, headers=headers, cookies=cookies, flaresolverr=flaresolverr,
                                      allow_redirects=allow_redirects)
             except requests.exceptions.RequestException as e:
                 i += 1
                 logging.info('请求%s 失败，开始准备重试(%s/3)' % (url, i))
-                logging.info("错误信息：%s" % e)   
-    def post_json(self, url, json=None, headers=None, cookies=None, allow_redirects=True, skip_check=False):
+                logging.info("错误信息：%s" % e)
+
+    def post_json(self, url, json=None, headers=None, cookies=None, allow_redirects=True, skip_check=False,flaresolverr=None):
         i = 0
         while i < 3:
             try:
                 if not skip_check:
                     self.check_request()
-                return requests.post(url, json=json, verify=False, headers=headers, cookies=cookies,
+                return requests.post(url, json=json, verify=False, headers=headers, cookies=cookies, flaresolverr=flaresolverr,
                                      allow_redirects=allow_redirects)
             except requests.exceptions.RequestException as e:
                 i += 1

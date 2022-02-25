@@ -1,0 +1,23 @@
+version: '3.3'
+services:
+    movie-robot:
+        restart: always
+        container_name: movie-robot
+        volumes:
+            - './data:/data'
+            - '/volume1/电影:/video'
+        environment:
+            - LICENSE_KEY=111
+        image: 'yipengfei/movie-robot:latest'
+    flaresolverr:
+        # DockerHub mirror flaresolverr/flaresolverr:latest
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        container_name: flaresolverr
+        environment:
+        - LOG_LEVEL=${LOG_LEVEL:-info}
+        - LOG_HTML=${LOG_HTML:-false}
+        - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
+        - TZ=Asia/Shanghai
+        ports:
+        - "${PORT:-8191}:8191"
+        restart: unless-stopped

@@ -33,6 +33,8 @@ pt:
     #登陆方式cookie/user，建议都使用cookie，不建议使用账号密码的方式；如果type为user，需要提供username、password配置项
     type: 'cookie'
     cookie: ''
+    # 填写 flaresolverr 代理地址
+    flaresolverr:  'http://flaresolverr:8191'
   hdsky:
     type: 'cookie'
     cookie: ''
